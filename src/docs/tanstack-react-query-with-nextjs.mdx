@@ -1,0 +1,347 @@
+# TanStack React Query with Next.js - Complete Guide
+
+## Overview
+
+TanStack React Query is a powerful library for data fetching, caching, and mutations in React applications. This guide demonstrates a simpler and more native approach compared to classic React Query integrations, providing a clean way to manage server state without Redux.
+
+## Table of Contents
+
+1. [Installation](#installation)
+2. [Project Setup](#project-setup)
+3. [Creating the Query Provider](#creating-the-query-provider)
+4. [Wrapping Your Application](#wrapping-your-application)
+5. [Creating API Routes](#creating-api-routes)
+6. [Using Queries and Mutations](#using-queries-and-mutations)
+7. [Key Concepts](#key-concepts)
+
+---
+
+## Installation
+
+Install the required dependencies:
+
+```bash
+npm install @tanstack/react-query zod
+```
+
+**Package Overview:**
+- `@tanstack/react-query` - Handles queries, caching, and mutations
+- `zod` - Validates data on the client or server
+
+---
+
+## Project Setup
+
+### File Structure
+
+```
+src/
+├── app/
+│   ├── api/
+│   │   └── users/
+│   │       └── route.js
+│   ├── users/
+│   │   └── page.jsx
+│   ├── layout.js
+│   └── globals.css
+└── providers/
+    └── QueryProvider.js
+```
+
+---
+
+## Creating the Query Provider
+
+Create a React Query provider to wrap your application and provide query client functionality throughout your app.
+
+**File:** `src/providers/QueryProvider.js`
+
+```javascript
+"use client";
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+// Create a single query client instance
+const queryClient = new QueryClient({
+    defaultOptions: {
+        queries: {
+            staleTime: 60 * 1000, // 1 minute
+            retry: 1, // optional: retry failed queries once
+        },
+    },
+});
+
+export default function Providers({ children }) {
+    return (
+        <QueryClientProvider client={queryClient}>
+            {children}
+        </QueryClientProvider>
+    );
+}
+```
+
+### Configuration Options
+
+- **staleTime**: Duration (in milliseconds) before cached data is considered stale. Set to 1 minute (60,000ms) in this example.
+- **retry**: Number of times to retry failed queries. Set to 1 for a single retry attempt.
+
+---
+
+## Wrapping Your Application
+
+Wrap your root layout with the QueryProvider to enable React Query throughout your application.
+
+**File:** `src/app/layout.js`
+
+```javascript
+import "./globals.css";
+import QueryProvider from "../providers/QueryProvider";
+
+const RootLayout = ({ children }) => {
+  return (
+    <html lang="en">
+      <body>
+        <QueryProvider>
+            {children}
+        </QueryProvider>
+      </body>
+    </html>
+  );
+}
+
+export default RootLayout;
+```
+
+### Why QueryClientProvider is Required
+
+`QueryClientProvider` is a context provider from React Query that uses React's Context API internally to:
+
+- Manage the query cache
+- Provide hooks like `useQuery` and `useMutation` anywhere in your app
+
+**Important:** Without wrapping your app in `QueryClientProvider`, React Query hooks won't function, and you'll encounter this error:
+
+```
+No QueryClient set, use QueryClientProvider to set one
+```
+
+Wrapping your app with the provider is mandatory for React Query to work.
+
+---
+
+## Creating API Routes
+
+Create REST API routes using Next.js App Router instead of tRPC.
+
+**File:** `app/api/users/route.js`
+
+```javascript
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
+
+// Validation schema
+const userSchema = z.object({
+  name: z.string().min(3)
+});
+
+let users = [{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }];
+
+export async function GET() {
+  return NextResponse.json(users);
+}
+
+export async function POST(req) {
+  try {
+    const body = await req.json();
+    const user = userSchema.parse(body);
+    const newUser = { id: users.length + 1, ...user };
+    users.push(newUser);
+    return NextResponse.json(newUser, { status: 201 });
+  } catch (err) {
+    return NextResponse.json({ error: err.message }, { status: 400 });
+  }
+}
+```
+
+### API Route Features
+
+- **GET endpoint**: Returns the list of users
+- **POST endpoint**: Adds a new user with validation
+- **Zod validation**: Ensures the user name is at least 3 characters long
+- **Error handling**: Returns appropriate error messages and status codes
+
+---
+
+## Using Queries and Mutations
+
+Implement data fetching and mutations using TanStack Query hooks in your components.
+
+**File:** `app/users/page.jsx`
+
+```javascript
+"use client";
+
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+
+export default function UsersPage() {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState('');
+
+  // Fetch users
+  const { data: users, isLoading } = useQuery({
+    queryKey: ['users'],
+    queryFn: async () => {
+      const res = await fetch('/api/users');
+      if (!res.ok) throw new Error('Failed to fetch users');
+      return res.json();
+    }
+  });
+
+  // Add a new user
+  const addUser = useMutation({
+    mutationFn: async (newUser) => {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUser)
+      });
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries(['users'])
+  });
+
+  if (isLoading) return <p>Loading users...</p>;
+
+  return (
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-4">Users</h1>
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          addUser.mutate({ name });
+          setName('');
+        }}
+        className="mb-6"
+      >
+        <input
+          className="border p-2 mr-2 rounded"
+          placeholder="Name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <button className="px-4 py-2 bg-blue-600 text-white rounded" type="submit">
+          Add User
+        </button>
+      </form>
+
+      <ul>
+        {users.map((user) => (
+          <li key={user.id} className="border p-2 rounded mb-2">{user.name}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+### Component Breakdown
+
+**useQuery Hook:**
+- **queryKey**: Unique identifier for the query (`['users']`)
+- **queryFn**: Async function that fetches data from the API
+- **data**: The fetched users data
+- **isLoading**: Loading state indicator
+
+**useMutation Hook:**
+- **mutationFn**: Async function that posts new user data
+- **onSuccess**: Callback that invalidates the users query to refetch updated data
+- **mutate**: Method to trigger the mutation
+
+**Query Invalidation:**
+```javascript
+queryClient.invalidateQueries(['users'])
+```
+This ensures the users list is automatically refetched after adding a new user, keeping the UI in sync with the server state.
+
+---
+
+## Key Concepts
+
+### Query Keys
+
+Query keys uniquely identify queries in the cache. They can be:
+- Simple strings: `['users']`
+- Arrays with parameters: `['user', userId]`
+
+### Automatic Caching
+
+TanStack Query automatically caches query results and reuses them when the same query is requested, reducing unnecessary network requests.
+
+### Stale-While-Revalidate
+
+Data is served from cache immediately (if available) while being refetched in the background, providing a smooth user experience.
+
+### Query Invalidation
+
+Use `queryClient.invalidateQueries()` to mark queries as stale and trigger refetching, ensuring data consistency after mutations.
+
+### Loading and Error States
+
+React Query provides built-in loading and error states through the hooks:
+- `isLoading`: True when fetching for the first time
+- `isError`: True when an error occurs
+- `error`: The error object
+
+---
+
+## Testing Your Application
+
+Start your Next.js development server:
+
+```bash
+npm run dev
+```
+
+Navigate to your users page:
+
+```
+http://localhost:3000/users
+```
+
+You should see:
+- A list of existing users (Alice and Bob)
+- A form to add new users
+- Real-time updates when adding users
+
+---
+
+## Benefits of This Approach
+
+1. **Simple Setup**: No Redux boilerplate required
+2. **Automatic Caching**: Reduces unnecessary API calls
+3. **Built-in Loading States**: Easy to show loading indicators
+4. **Optimistic Updates**: Optional support for immediate UI updates
+5. **Error Handling**: Built-in error state management
+6. **Type Safety**: Works seamlessly with TypeScript
+7. **DevTools Support**: Optional React Query DevTools for debugging
+
+---
+
+## Next Steps
+
+- Explore React Query DevTools for debugging
+- Implement optimistic updates for better UX
+- Add pagination or infinite scroll
+- Implement update and delete mutations
+- Add error boundaries for better error handling
+- Configure refetch intervals for real-time data
+
+---
+
+## Resources
+
+- [TanStack Query Documentation](https://tanstack.com/query/latest)
+- [Zod Documentation](https://zod.dev)
+- [Next.js API Routes](https://nextjs.org/docs/app/building-your-application/routing/route-handlers)

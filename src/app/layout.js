@@ -1,10 +1,13 @@
 import "./globals.css";
+import QueryProvider from "../providers/QueryProvider";
 
 const RootLayout = ({ children }) => {
   return (
     <html lang="en">
       <body>
-        {children}
+        <QueryProvider>
+            {children}
+        </QueryProvider>
       </body>
     </html>
   );
