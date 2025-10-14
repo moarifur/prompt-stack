@@ -1,11 +1,16 @@
-import React from 'react';
+import prisma from '@/lib/db'
 import {Button} from "@/components/ui/button";
 
-const HomePage = () => {
+const HomePage = async () => {
+    const users = await prisma.user.findMany()
     return (
         <>
-          <h1 className={`text-5xl`}>Hello</h1>
-            <Button>Yo</Button>
+            <h1 className={`text-5xl`}>My Users</h1>
+            <br/>
+
+            {JSON.stringify(users, null, 2)}
+
+            <Button>Submit</Button>
         </>
     );
 };
