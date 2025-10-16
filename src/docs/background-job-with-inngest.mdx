@@ -1,0 +1,306 @@
+# Getting Started with Inngest
+
+Build reliable background workflows in your Next.js app in just 10 minutes.
+
+---
+
+## What You'll Learn
+
+By the end of this guide, you'll be able to:
+
+- ✅ Set up Inngest in your Next.js project
+- ✅ Create your first background function
+- ✅ Trigger functions from your code and the Dev Server UI
+
+---
+
+## Prerequisites
+
+- Next.js app with App Router
+- Node.js installed on your machine
+
+---
+
+## Installation
+
+### Step 1: Start Your Next.js App
+
+First, get your development server running:
+
+```bash
+npm run dev
+```
+
+Keep this terminal running and open a new tab for the next steps.
+
+---
+
+### Step 2: Install Inngest SDK
+
+In a new terminal tab, install the Inngest package:
+
+```bash
+npm install inngest
+```
+
+---
+
+### Step 3: Start the Inngest Dev Server
+
+The Dev Server gives you a local environment to test and debug your functions:
+
+```bash
+npx inngest-cli@latest dev
+```
+
+**Expected output:**
+
+```
+Inngest Dev Server online at 0.0.0.0:8288
+- http://127.0.0.1:8288 (http://localhost:8288)
+```
+
+Open **http://localhost:8288** in your browser to access the Dev Server UI.
+
+> 💡 **Tip:** The Dev Server is like a local testing environment where you can see all your events and function runs in real-time.
+
+---
+
+## Configuration
+
+### Step 4: Create the Inngest Client
+
+The client is how you'll send events and define functions.
+
+Create a new directory: `src/inngest/`
+
+**`src/inngest/client.js`**
+
+```javascript
+import { Inngest } from "inngest"
+
+// Create a client to send and receive events
+export const inngest = new Inngest({ id: "my-app" })
+```
+
+---
+
+### Step 5: Set Up the API Route Handler
+
+Inngest needs an endpoint to communicate with your app. Create the route handler:
+
+**`src/app/api/inngest/route.js`**
+
+```javascript
+import { serve } from "inngest/next"
+import { inngest } from "@/inngest/client"
+
+export const { GET, POST, PUT } = serve({
+  client: inngest,
+  functions: [
+    // Your functions will be registered here
+  ]
+})
+```
+
+> 📌 **Note:** This route allows Inngest to invoke your functions securely via HTTP.
+
+---
+
+## Creating Your First Function
+
+### Step 6: Define the Function
+
+Functions in Inngest are triggered by events. Let's create a simple "Hello World" function.
+
+**`src/inngest/functions.js`**
+
+```javascript
+import { inngest } from "./client"
+
+export const helloWorld = inngest.createFunction(
+  { id: "hello-world" },
+  { event: "test/hello.world" },
+  async ({ event, step }) => {
+    await step.sleep("wait-a-moment", "1s")
+    return { message: `Hello ${event.data.email}!` }
+  }
+)
+```
+
+**What's happening here?**
+
+- `id`: Unique identifier for your function
+- `event`: The event name that triggers this function
+- `step.sleep()`: Built-in step that pauses execution (great for rate limiting!)
+- `event.data`: Access data passed with the event
+
+---
+
+### Step 7: Register the Function
+
+Import and add your function to the route handler:
+
+**`src/app/api/inngest/route.js`**
+
+```javascript
+import { serve } from "inngest/next"
+import { inngest } from "@/inngest/client"
+import { helloWorld } from "@/inngest/functions" // ← Import here
+
+export const { GET, POST, PUT } = serve({
+  client: inngest,
+  functions: [
+    helloWorld, // ← Register here
+  ]
+})
+```
+
+---
+
+## Testing Your Function
+
+### Method 1: Trigger from Dev Server UI
+
+1. Open **http://localhost:8288/functions**
+2. Find your `hello-world` function
+3. Click the **"Invoke"** button
+4. Add this payload in the editor:
+
+```json
+{
+  "data": {
+    "email": "test@example.com"
+  }
+}
+```
+
+5. Click **"Invoke Function"**
+
+You'll see the function run in the **"Runs"** tab with full details: payload, output, and timeline.
+
+> 🎉 **Success!** Your function waited 1 second and returned "Hello test@example.com!"
+
+---
+
+### Method 2: Trigger from Your Code
+
+Let's send events programmatically from your Next.js app.
+
+**`src/app/api/hello/route.js`**
+
+```javascript
+import { NextResponse } from "next/server"
+import { inngest } from "@/inngest/client"
+
+// Ensure a fresh event is sent on every request
+export const dynamic = "force-dynamic"
+
+export async function GET() {
+  // Send an event to Inngest
+  await inngest.send({
+    name: "test/hello.world",
+    data: {
+      email: "testUser@example.com"
+    }
+  })
+
+  return NextResponse.json({ message: "Event sent!" })
+}
+```
+
+**Test it:**
+
+Visit **http://localhost:3000/api/hello** and you'll see:
+
+```json
+{ "message": "Event sent!" }
+```
+
+Check the Dev Server UI - a new run will appear automatically!
+
+> 💡 **Tip:** In production, you'd typically send events during POST requests (e.g., after a user signup or payment).
+
+---
+
+## Real-World Example
+
+Here's how to trigger your function from a homepage button:
+
+**`src/app/(dashboard)/page.js`**
+
+```javascript
+import prisma from '@/lib/db'
+import { Button } from "@/components/ui/button"
+
+const HomePage = async () => {
+  const users = await prisma.user.findMany()
+
+  return (
+    <>
+      <h1 className="text-5xl">My Users</h1>
+      <br />
+
+      {JSON.stringify(users, null, 2)}
+
+      <a href="/api/hello">
+        <Button>Trigger Background Job</Button>
+      </a>
+    </>
+  )
+}
+
+export default HomePage
+```
+
+When users click the button, it hits `/api/hello`, which sends an event that triggers your `hello-world` function in the background!
+
+---
+
+## Next Steps
+
+🎉 **Congratulations!** You've successfully:
+
+- Set up Inngest in your Next.js app
+- Created and registered a function
+- Triggered it from both the UI and your code
+
+### What's Next?
+
+- **Add more functions** for different events (user signups, payments, etc.)
+- **Use `step.run()`** to break functions into retriable steps
+- **Chain functions** together for complex workflows
+- **Deploy to production** (functions work the same way!)
+
+---
+
+## Common Use Cases
+
+- 📧 Drip email campaigns
+- 💳 Payment processing workflows
+- 🤖 Chaining LLM interactions
+- 📊 Async data processing
+- ⏰ Scheduled tasks
+
+---
+
+## Debugging Tips
+
+The Dev Server UI makes debugging easy:
+
+- **Rerun** any function with the same payload
+- **Cancel** long-running functions
+- View full **execution timeline** with step-by-step details
+- Inspect **event payloads** and **function outputs**
+
+---
+
+## Need Help?
+
+- 📚 [Inngest Documentation](https://www.inngest.com/docs)
+- 💬 [Discord Community](https://www.inngest.com/discord)
+- 🐛 [Report Issues](https://github.com/inngest/inngest)
+
+---
+
+**Ready to build more?** Check out advanced patterns like retries, throttling, and fan-out workflows in the official docs!

@@ -10,7 +10,9 @@ const HomePage = async () => {
 
             {JSON.stringify(users, null, 2)}
 
-            <Button>Submit</Button>
+            <a href="/api/hello">
+                <Button>Submit</Button>
+            </a>
         </>
     );
 };
